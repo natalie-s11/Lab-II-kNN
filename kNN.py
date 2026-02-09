@@ -424,7 +424,3 @@ print(f"F1 Score = {best_f1['f1_score']:.3f}")
 
 #%%
 # Step 8: Choose another variable as the target in the dataset and create another kNN model using the two functions you created in step 7.
-
-#%%
-# Step 8: Choose another variable as the target in the dataset and create another kNN model using the two functions you created in step 7.
-
