@@ -32,4 +32,4 @@ function just run them separately.)
 7. How well does the model perform? Did the interaction of the adjusted thresholds and k values help the model? Why or why not? 
 
 8. Choose another variable as the target in the dataset and create another kNN model using the two functions you created in
-step 7. 
+step 6. 
