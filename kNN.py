@@ -229,31 +229,24 @@ print(f"True Positives (correctly predicted private): {tp}")
 
 from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
 
-# Function 1: Clean data and split into training/test
+
+# Function 1: Clean data and split into training/test (FLEXIBLE VERSION)
 def clean_and_split_data(file_path, target_col, feature_cols, test_size=0.45, random_state=42):
     """
     Cleans data and splits into training and test sets.
-    
-    Parameters:
-    - file_path: path to the CSV file
-    - target_col: name of the target variable column
-    - feature_cols: list of feature column names to use (e.g., ['state'])
-    - test_size: proportion for test set (default 0.45 for test+tune)
-    - random_state: random seed for reproducibility
-    
-    Returns:
-    - X_train_encoded, X_test_encoded, y_train, y_test
     """
     # Read data
     df = pd.read_csv(file_path)
     
     # Prepare data (simplified version of prep_college_pipeline)
     df['cohort_size'] = df['cohort_size'].fillna(0).astype(int)
-    df['hbcu'] = df['hbcu'].apply(lambda x: True if x == 1 else False)
-    df['flagship'] = df['flagship'].apply(lambda x: True if x == 1 else False)
+    df['hbcu'] = df['hbcu'].apply(lambda x: 1 if x == 1 else 0)
+    df['flagship'] = df['flagship'].apply(lambda x: 1 if x == 1 else 0)
+    
+    # FIXED: Use correct values '4-year' and '2-year' (not 'four-year' and 'two-year')
     df['is_four_year'] = df['level'].apply(
-        lambda x: True if x == 'four-year' else (False if x == 'two-year' else pd.NA)
-    ).astype('boolean')
+        lambda x: 1 if str(x).strip() == '4-year' else (0 if str(x).strip() == '2-year' else None)
+    )
     
     df.drop(['level'], axis=1, inplace=True, errors='ignore')
     df = pd.get_dummies(df, columns=['control'], prefix='control')
@@ -279,10 +272,14 @@ def clean_and_split_data(file_path, target_col, feature_cols, test_size=0.45, ra
         'vsa_grad_after6_first'
     ], axis=1, inplace=True, errors='ignore')
     
-    # Create target
-    df[target_col] = (
+    # Create private_school column (in case it's the target)
+    df['private_school'] = (
         df['control_Private for-profit'] + df['control_Private not-for-profit']
     )
+    
+    # Remove rows with missing target values
+    df = df[df[target_col].notna()].copy()
+    df[target_col] = df[target_col].astype(int)
     
     # Select features and target
     X = df[feature_cols]
@@ -304,7 +301,6 @@ def clean_and_split_data(file_path, target_col, feature_cols, test_size=0.45, ra
     )
     
     return X_train_encoded, X_test_encoded, y_train, y_test
-
 
 # Function 2: Train and test model with different k and threshold values
 def train_and_evaluate_knn(X_train, X_test, y_train, y_test, k_value=3, threshold=0.5):
@@ -423,4 +419,73 @@ print(f"F1 Score = {best_f1['f1_score']:.3f}")
 
 
 #%%
-# Step 8: Choose another variable as the target in the dataset and create another kNN model using the two functions you created in step 7.
+# Step 8: Choose another variable as the target in the dataset and create another kNN model using the two functions you created in step 6.
+# New Question: Can we predict if a college is a four-year institution based on state?
+
+
+# Use Function 1 from Step 6 with a DIFFERENT target
+X_train_fy, X_test_fy, y_train_fy, y_test_fy = clean_and_split_data(
+    file_path="college_completion.csv",
+    target_col='is_four_year',  # DIFFERENT TARGET!
+    feature_cols=['state'],  # Just use state (like the original model)
+    test_size=0.45,
+    random_state=42
+)
+
+print(f"Training set: {X_train_fy.shape}")
+print(f"Test set: {X_test_fy.shape}")
+print(f"Number of features: {X_train_fy.shape[1]} (after encoding)")
+print("\n")
+
+# Use Function 2 from Step 6 to test different k and threshold combinations
+print("Testing k and threshold combinations:\n")
+
+k_values_fy = [3, 5, 10, 15]
+threshold_values_fy = [0.3, 0.5, 0.7]
+
+results_list_fy = []
+
+for k in k_values_fy:
+    for thresh in threshold_values_fy:
+        result = train_and_evaluate_knn(X_train_fy, X_test_fy, y_train_fy, y_test_fy, k, thresh)
+        results_list_fy.append(result)
+        print(f"k={k:2d}, threshold={thresh:.1f} -> "
+              f"Accuracy: {result['accuracy']:.3f}, "
+              f"Precision: {result['precision']:.3f}, "
+              f"Recall: {result['recall']:.3f}, "
+              f"F1: {result['f1_score']:.3f}")
+
+# Create summary
+results_df_fy = pd.DataFrame(results_list_fy)
+results_df_fy = results_df_fy.drop(['predictions', 'probabilities', 'confusion_matrix'], axis=1)
+
+print("\n" + "="*60)
+print("SUMMARY:")
+print("="*60)
+print(results_df_fy.to_string(index=False))
+
+# Find best model
+best_accuracy_fy = results_df_fy.loc[results_df_fy['accuracy'].idxmax()]
+print(f"\n{'='*60}")
+print("BEST MODEL:")
+print(f"{'='*60}")
+print(f"k = {best_accuracy_fy['k']}")
+print(f"threshold = {best_accuracy_fy['threshold']}")
+print(f"Accuracy = {best_accuracy_fy['accuracy']:.3f}")
+print(f"Precision = {best_accuracy_fy['precision']:.3f}")
+print(f"Recall = {best_accuracy_fy['recall']:.3f}")
+print(f"F1 Score = {best_accuracy_fy['f1_score']:.3f}")
+
+print("\n" + "="*60)
+print("COMPARISON:")
+print("="*60)
+print(f"Original model (predict private/public from state):    60.9%")
+print(f"New model (predict four-year/two-year from state):     {best_accuracy_fy['accuracy']*100:.1f}%")
+print(f"\nConclusion: Does state predict institution level (4yr vs 2yr) better")
+print(f"than it predicts institution type (private vs public)?")
+
+
+
+
+
+ 
